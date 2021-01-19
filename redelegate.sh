@@ -2,17 +2,16 @@
 
 operatorAddress="cro1rtqp26y4z9pshwv3w06uqd3dt7myxth4l6fuu3"
 validatorAddress="crocncl1rtqp26y4z9pshwv3w06uqd3dt7myxth4uh247d"
+withdrawAddress="cro1tqgy4anzwzq7lwzuze2rhktf33l8smm67kc28u"
 keyPasswordFile="$1"
 keyring="cross-fire-testing"
 #node=$5
-runtime="5 minute"
-endtime=$(date -ud "$runtime" +%s)
-
 
 function chain-maind() {
   local argument="$1"
   #echo $variable
   runDocker="docker exec -i crossfire-docker_crossfire_1 chain-maind $argument"
+  #echo "$runDocker"
   eval $runDocker
   #docker exec -i crossfire-docker_crossfire_1 chain-maind $partial_cmd --from ${keyring} --chain-id 'crossfire' --gas-prices 6000basetcro --yes < $keyPasswordFile
   #docker exec -i crossfire-docker_crossfire_1 chain-maind tx distribution withdraw-rewards crocncl1rtqp26y4z9pshwv3w06uqd3dt7myxth4uh247d --from cross-fire-testing --chain-id "crossfire" --gas-prices 6000basetcro --yes < ~/.bleh
@@ -20,46 +19,89 @@ function chain-maind() {
 
 function transaction() {
   local partial_cmd="$1"
-  local cmd="${partial_cmd} --from ${keyring} --chain-id 'crossfire' --gas-prices 6000basetcro --yes < $keyPasswordFile"
+  local cmd="${partial_cmd} --from ${keyring} --chain-id 'crossfire' --gas 80000000 --gas-adjustment 1.5 --gas-prices 0.1basetcro --yes < $keyPasswordFile"
   local retries=3
   success=false
 
-  #chain-maind "$cmd"
-
   while (( retries > 0 )); do
-    tx_hash=$(chain-maind "${cmd}" | jq '.txhash' | tr -d '"')
-    if [ $? -eq 0 ] && [ ! -z "$tx_hash" ]; then
-      success=true
-      echo "Success"
-      break;
+    #echo $cmd
+    tx=$(chain-maind "${cmd}" 2>.error)
+    if [ $? -eq 0 ]; then
+      #echo "Printing tx: $tx"
+      tx_hash=$(echo $tx | jq '.txhash' | tr -d '"')
+      if [ ! -z "$tx_hash" ]; then
+        success=true
+        #echo $tx_hash
+        break;
+      fi
     else
-      ((retries=retries-1))
-      echo "Failed to perform tx: '${partial_cmd}'. Waiting a couple of seconds and then retrying again. Retries remaining: ${retries}."
-      #sleep 10s
+      tx_timeout=$(grep -c "timed out waiting" < .error)
+      if [ $tx_timeout -eq 1 ]; then
+        success=true
+        #echo "Success but timeout"
+        sleep 2
+        break;
+      else
+        ((retries=retries-1))
+        echo "Failed to perform tx: '${partial_cmd}'. Waiting a couple of seconds and then retrying again. Retries remaining: ${retries}."
+      fi
     fi
   done
 }
 
-function collectreward() {
-  #local commission=$1
+function collect_reward() {
   transaction "tx distribution withdraw-rewards ${validatorAddress}"
 }
 
-function collectcommission() {
-  collectreward "--commission"
+function collect_commission() {
+  transaction "tx distribution withdraw-rewards ${validatorAddress} --commission"
 }
 
-function run() {
+function set_withdraw_addr {
+  local address=$1
+  transaction "tx distribution set-withdraw-addr $address"
+}
+
+function collect_reward_five_minutes() {
+  runtime="5 minute"
+  endtime=$(date -ud "$runtime" +%s)
+  echo "Collect for 5 minutes"
   while [[ $(date -u +%s) -le $endtime ]]
   do
-    echo "Time Now: `date +%H:%M:%S`"
+    #echo "Time Now: `date +%H:%M:%S`"
+    collect_reward
   done
 }
 
+get_wallet_balance() {
+  balance=$(chain-maind "query bank balances ${operatorAddress} --output json --denom basetcro | jq '.amount | tonumber'")
+}
 
-#chain-maind status
+delegate() {
+  get_wallet_balance
+  echo "Current wallet balance is: ${balance} basetcro"
+  delegatable="$(($balance-1000))"
+  echo "Can delegate a total of ${delegatable} basetcro"
 
-#run
+  if [ $delegatable -gt 0 ]; then
+    transaction "tx staking delegate ${validatorAddress} ${delegatable}basetcro"
+    if [ "$success" = true ]; then
+      echo "Successfully performed delegation to ${validatorAddress} - tx hash: ${tx_hash}"
+    else
+      echo "Failed to delegate to ${validatorAddress} !"
+    fi
+  else
+    echo "We don't have sufficient basetcro to delegate"
+  fi
+}
 
-collectreward
-#transaction
+function run() {
+  while true
+  do
+    collect_reward_five_minutes
+    collect_commission
+    delegate
+  done
+}
+
+run
