@@ -2,7 +2,6 @@
 
 operatorAddress="cro1rtqp26y4z9pshwv3w06uqd3dt7myxth4l6fuu3"
 validatorAddress="crocncl1rtqp26y4z9pshwv3w06uqd3dt7myxth4uh247d"
-withdrawAddress="cro1tqgy4anzwzq7lwzuze2rhktf33l8smm67kc28u"
 keyPasswordFile="$1"
 keyring="cross-fire-testing"
 #node=$5
@@ -19,13 +18,13 @@ function chain-maind() {
 
 function transaction() {
   local partial_cmd="$1"
-  local cmd="${partial_cmd} --from ${keyring} --chain-id 'crossfire' --gas 80000000 --gas-adjustment 1.5 --gas-prices 0.1basetcro --yes < $keyPasswordFile"
+  local cmd="${partial_cmd} --from ${keyring} --chain-id 'crossfire' --gas auto --gas-adjustment 1.5 --gas-prices 0.1basetcro --yes < $keyPasswordFile"
   local retries=3
   success=false
 
   while (( retries > 0 )); do
     #echo $cmd
-    tx=$(chain-maind "${cmd}" 2>.error)
+    tx=$(chain-maind "${cmd}" 2>~/.error)
     if [ $? -eq 0 ]; then
       #echo "Printing tx: $tx"
       tx_hash=$(echo $tx | jq '.txhash' | tr -d '"')
@@ -35,7 +34,7 @@ function transaction() {
         break;
       fi
     else
-      tx_timeout=$(grep -c "timed out waiting" < .error)
+      tx_timeout=$(grep -c "timed out waiting" < ~/.error)
       if [ $tx_timeout -eq 1 ]; then
         success=true
         #echo "Success but timeout"
@@ -65,13 +64,25 @@ function set_withdraw_addr {
 function collect_reward_five_minutes() {
   runtime="5 minute"
   endtime=$(date -ud "$runtime" +%s)
-  echo "Collect for 5 minutes"
+  echo "$(date): Collect for 5 minutes"
   while [[ $(date -u +%s) -le $endtime ]]
   do
     #echo "Time Now: `date +%H:%M:%S`"
     collect_reward
   done
 }
+
+function set_withdraw_addr_five_minutes() {
+  runtime="5 minute"
+  endtime=$(date -ud "$runtime" +%s)
+  echo "$(date): Set address for 5 minutes"
+  while [[ $(date -u +%s) -le $endtime ]]
+  do
+    #echo "Time Now: `date +%H:%M:%S`"
+    set_withdraw_addr $operatorAddress
+  done
+}
+
 
 get_wallet_balance() {
   balance=$(chain-maind "query bank balances ${operatorAddress} --output json --denom basetcro | jq '.amount | tonumber'")
@@ -98,7 +109,8 @@ delegate() {
 function run() {
   while true
   do
-    collect_reward_five_minutes
+    set_withdraw_addr_five_minutes
+    #collect_reward_five_minutes
     collect_commission
     delegate
   done
