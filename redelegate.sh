@@ -84,11 +84,11 @@ function set_withdraw_addr_five_minutes() {
 }
 
 
-get_wallet_balance() {
+function get_wallet_balance() {
   balance=$(chain-maind "query bank balances ${operatorAddress} --output json --denom basetcro | jq '.amount | tonumber'")
 }
 
-delegate() {
+function delegate() {
   get_wallet_balance
   echo "Current wallet balance is: ${balance} basetcro"
   delegatable="$(($balance-1000))"
