@@ -12,8 +12,8 @@ mem_limit_percent=35
 if [ $(echo "$mem_usage_percent > $mem_limit_percent"|bc -l) -eq 1 ]; then
     echo "Memory $mem_usage_percent>$mem_limit_percent - Recreate docker container"
     cd $docker_dir
-    docker-compose down
-    docker-compose up -d
+    /usr/local/bin/docker-compose down
+    /usr/local/bin/docker-compose up -d
 else
     echo "Memory $mem_usage_percent<$mem_limit_percent - Don't restart"
 
