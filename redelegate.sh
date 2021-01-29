@@ -37,12 +37,13 @@ function transaction() {
       tx_timeout=$(grep -c "timed out waiting" < ~/.error)
       if [ $tx_timeout -eq 1 ]; then
         success=true
-        #echo "Success but timeout"
-        sleep 2
+        echo "Success but timeout, sleeping 1 min"
+        sleep 1m
         break;
       else
         ((retries=retries-1))
-        echo "Failed to perform tx: '${partial_cmd}'. Waiting a couple of seconds and then retrying again. Retries remaining: ${retries}."
+        echo "Failed to perform tx: '${partial_cmd}'. Waiting 2 min and then retrying again. Retries remaining: ${retries}."
+        sleep 2m
       fi
     fi
   done
@@ -109,10 +110,10 @@ function delegate() {
 function run() {
   while true
   do
-    set_withdraw_addr_five_minutes
-    #collect_reward_five_minutes
     collect_commission
     delegate
+    set_withdraw_addr_five_minutes
+    #collect_reward_five_minutes
   done
 }
 
